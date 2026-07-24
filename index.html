@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>App Cliente de Prueba - SSO UTN FRVM</title>
+  <style>
+    body { 
+      font-family: system-ui, -apple-system, sans-serif; 
+      padding: 2rem; 
+      background: #f4f4f9; 
+      color: #333; 
+    }
+    .card { 
+      background: white; 
+      padding: 2.5rem; 
+      border-radius: 12px; 
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08); 
+      max-width: 600px; 
+      margin: 0 auto; 
+    }
+    h2 { margin-top: 0; color: #111; }
+    p { color: #555; line-height: 1.5; }
+    button { 
+      background: #0056b3; 
+      color: white; 
+      border: none; 
+      padding: 12px 24px; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      font-size: 16px; 
+      font-weight: 600; 
+      transition: background 0.2s; 
+    }
+    button:hover { background: #004494; }
+    #result-container { 
+      display: none; 
+      margin-top: 2rem; 
+      padding-top: 2rem; 
+      border-top: 1px solid #eee; 
+    }
+    #status-msg { 
+      font-weight: 600; 
+      margin-bottom: 1rem; 
+      color: #0056b3; 
+    }
+    .error { color: #d32f2f !important; }
+    pre { 
+      background: #1e1e1e; 
+      color: #00ff00; 
+      padding: 1.2rem; 
+      border-radius: 8px; 
+      overflow-x: auto; 
+      font-size: 14px; 
+      line-height: 1.4; 
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Simulador de App Cliente</h2>
+    <p>Esta página simula ser el frontend de una aplicación externa que requiere iniciar sesión con el SSO de la UTN FRVM.</p>
+    
+    <button id="login-btn">Ingresar con SSO</button>
+    
+    <div id="result-container">
+      <h3>Resultado del Login:</h3>
+      <p id="status-msg"></p>
+      <pre id="result-data"></pre>
+    </div>
+  </div>
+
+  <script>
+    // --- CONFIGURACIÓN ---
+    // Asegurate de que el CLIENT_ID exista en tu base de datos del SSO
+    const CLIENT_ID = '1'; 
+    const REDIRECT_URI = 'http://localhost:8080/callback';
+    const SSO_BASE_URL = 'http://localhost:3000';
+
+    const loginBtn = document.getElementById('login-btn');
+    const resultContainer = document.getElementById('result-container');
+    const statusMsg = document.getElementById('status-msg');
+    const resultData = document.getElementById('result-data');
+
+    // 1. Iniciar el flujo de login
+    loginBtn.addEventListener('click', () => {
+      // Generar y guardar state para mitigar ataques CSRF
+      const state = crypto.randomUUID();
+      sessionStorage.setItem('oauth_state', state);
+
+      // Construir la URL del popup
+      const loginUrl = new URL(`${SSO_BASE_URL}/sso/login`);
+      loginUrl.searchParams.append('client_id', CLIENT_ID);
+      loginUrl.searchParams.append('redirect_uri', REDIRECT_URI);
+      loginUrl.searchParams.append('state', state);
+      loginUrl.searchParams.append('theme', 'light');
+
+      // Abrir el popup
+      window.open(loginUrl.toString(), 'sso_login', 'width=480,height=600');
+    });
+
+    // 2. Escuchar la respuesta del popup (vía postMessage)
+    window.addEventListener('message', async (event) => {
+      // SEGURIDAD: Validar estrictamente el origen del mensaje
+      if (event.origin !== SSO_BASE_URL) return;
+
+      const data = event.data;
+
+      // Si el login fue exitoso en el popup...
+      if (data && data.status === 'success') {
+        
+        // SEGURIDAD: Validar que el state que vuelve sea el mismo que generamos
+        const savedState = sessionStorage.getItem('oauth_state');
+        if (data.state !== savedState) {
+          alert('Error de validación: el state no coincide (posible CSRF).');
+          return;
+        }
+        
+        // El state es de un solo uso, lo borramos
+        sessionStorage.removeItem('oauth_state');
+
+        // Mostrar estado intermedio en la UI
+        resultContainer.style.display = 'block';
+        statusMsg.className = '';
+        statusMsg.textContent = '✅ Código recibido. Canjeando por tokens en el backend...';
+        resultData.textContent = 'Esperando respuesta del servidor interno...';
+
+        // 3. Enviar el authorization_code a nuestro propio backend (server.js)
+        try {
+          const res = await fetch('/api/auth/callback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: data.code })
+          });
+          
+          const result = await res.json();
+          
+          if (!res.ok) {
+            throw new Error(JSON.stringify(result, null, 2));
+          }
+
+          // Éxito total: mostrar los tokens y los datos del usuario en pantalla
+          statusMsg.textContent = '🎉 ¡Flujo OAuth completado exitosamente!';
+          resultData.textContent = JSON.stringify(result, null, 2);
+        
+        } catch (err) {
+          // Manejo de errores si el canje falla (ej: code expirado, invalid secret)
+          statusMsg.textContent = '❌ Error al canjear el token en el backend.';
+          statusMsg.className = 'error';
+          resultData.textContent = err.message;
+        }
+      }
+    });
+  </script>
+</body>
+</html>
