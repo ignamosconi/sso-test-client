@@ -1,0 +1,46 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f4f4;
+  margin: 0;
+}
+
+.container {
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 20px;
+}
+
+.card {
+  background: white;
+  padding: 20px;
+  margin-top: 20px;
+  border-radius: 8px;
+}
+
+button {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+pre {
+  background: #111;
+  color: white;
+  padding: 16px;
+  overflow-x: auto;
+  border-radius: 6px;
+}
+
+.success {
+  margin-top: 20px;
+  padding: 20px;
+  background: #d9f7df;
+  border-radius: 8px;
+}
+
+.hidden {
+  display: none;
+}
