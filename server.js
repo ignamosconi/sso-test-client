@@ -1,24 +1,30 @@
+require('dotenv').config();
 const express = require('express');
-const path = require('path');
+const fs = require('fs');
 
 const app = express();
 app.use(express.json());
 
-// Servimos el index.html estático
-app.use(express.static(__dirname)); 
+const PORT = process.env.PORT || 3001;
+const SSO_BASE_URL = process.env.SSO_BASE_URL;
+const CLIENT_ID = process.env.SSO_CLIENT_ID;
+const CLIENT_SECRET = process.env.SSO_CLIENT_SECRET;
+const REDIRECT_URI = process.env.SSO_REDIRECT_URI;
 
-// --- CONFIGURACIÓN DE TU APP CLIENTE ---
-const CLIENT_ID = '1'; // El ID de tu app
-const CLIENT_SECRET = '1eeb5ce5f6d28e7f277e644bde4f4eb226ea316f8c3ecaa083a5c012d39a25cf'
-const SSO_BASE_URL = 'http://localhost:3000';
-const REDIRECT_URI = 'http://localhost:8080/callback';
+// Servimos el index.html inyectando las variables de entorno
+app.get('/', (req, res) => {
+  let html = fs.readFileSync('./index.html', 'utf8');
+  html = html
+    .replace('__CLIENT_ID__', CLIENT_ID)
+    .replace('__REDIRECT_URI__', REDIRECT_URI)
+    .replace('__SSO_BASE_URL__', SSO_BASE_URL);
+  res.send(html);
+});
 
-// Este es el endpoint que tu frontend va a llamar cuando reciba el code
 app.post('/api/auth/callback', async (req, res) => {
   const { code } = req.body;
   
   try {
-    // PASO 3: El backend canjea el code por los tokens
     const tokenResponse = await fetch(`${SSO_BASE_URL}/sso/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -36,23 +42,18 @@ app.post('/api/auth/callback', async (req, res) => {
       return res.status(tokenResponse.status).json(tokenData);
     }
 
-    // PASO 4 (Opcional pero útil): Ya que tenemos el token, pedimos los datos del alumno
     const userResponse = await fetch(`${SSO_BASE_URL}/sso/me`, {
       headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
     });
     const userData = await userResponse.json();
 
-    // Le devolvemos todo al frontend para que lo muestre en pantalla
-    res.json({ 
-      tokens: tokenData, 
-      user: userData 
-    });
+    res.json({ tokens: tokenData, user: userData });
 
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.listen(8080, () => {
-  console.log('App Cliente levantada en http://localhost:8080');
+app.listen(PORT, () => {
+  console.log(`App Cliente levantada en http://localhost:${PORT}`);
 });
